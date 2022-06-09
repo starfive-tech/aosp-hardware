@@ -15,14 +15,15 @@
  */
 
 #define LOG_TAG "mapper@2.0-Mapper"
-//#define LOG_NDEBUG 0
+#define LOG_NDEBUG 0
 #include <android-base/logging.h>
 #include <utils/Log.h>
 #include <inttypes.h>
+#include <cutils/properties.h>
 #include <mapper-passthrough/2.0/GrallocBufferDescriptor.h>
 #include <hardware/gralloc1.h>
 
-#include "gbm_module.h"
+#include <drm_gralloc.h>
 #include "Mapper.h"
 
 namespace android {
@@ -33,20 +34,20 @@ namespace V2_0 {
 namespace implementation {
 
 Mapper::Mapper() {
-    ALOGV("Constructing");
-    mModule = new gbm_module_t;
-    mModule->gbm = nullptr;
-    int error = gbm_mod_init(mModule);
-    if (error) {
-        ALOGE("Failed Mapper() %d", error);
+    ALOGV("Mapper()");
+    char path[PROPERTY_VALUE_MAX];
+    property_get("gralloc.drm.kms", path, "/dev/dri/card0");
+
+    kms_fd = open(path, O_RDWR | O_CLOEXEC);
+    if (kms_fd < 0) {
+        ALOGE("failed to open %s", path);
     }
 }
 
 Mapper::~Mapper() {
-	ALOGV("Destructing");
-    if (mModule != nullptr) {
-        gbm_mod_deinit(mModule);
-        delete mModule;
+	ALOGV("~Mapper()");
+    if (kms_fd >= 0) {
+        close(kms_fd);
     }
 }
 
@@ -99,9 +100,9 @@ Return<void> Mapper::importBuffer(const hidl_handle& rawHandle,
     }
 
     ALOGV("register(%p)", bufferHandle);
-    int result = gbm_mod_register(mModule, bufferHandle);
+    int result = drm_register(kms_fd, bufferHandle);
     if (result != 0) {
-        ALOGE("gbm register failed: %d", result);
+        ALOGE("drm register failed: %d", result);
         native_handle_close(bufferHandle);
         native_handle_delete(bufferHandle);
         bufferHandle = nullptr;
@@ -120,14 +121,9 @@ Return<Error> Mapper::freeBuffer(void* buffer) {
     }
     if (error == Error::NONE) {
         ALOGV("unregister(%p)", bufferHandle);
-        int result = gbm_mod_unregister(mModule, bufferHandle);
-        if (result != 0) {
-            ALOGE("gbm unregister failed: %d", result);
-            error = Error::UNSUPPORTED;
-        } else {
-            native_handle_close(bufferHandle);
-            native_handle_delete(bufferHandle);
-        }
+        drm_free(kms_fd, bufferHandle);
+        native_handle_close(bufferHandle);
+        native_handle_delete(bufferHandle);
     }
     return error;
 }
@@ -176,11 +172,11 @@ Return<void> Mapper::lock(void* buffer, uint64_t cpuUsage, const IMapper::Rect& 
     aFence->waitForever("Mapper::lock");
 
     void* data = nullptr;
-    int result = gbm_mod_lock(mModule, bufferHandle, usage, accessRect.left, accessRect.top,
+    int result = drm_lock(bufferHandle, usage, accessRect.left, accessRect.top,
             accessRect.width, accessRect.height, &data);
 
     if (result != 0) {
-    	ALOGE("gbm_lock() returned %d", result);
+    	ALOGE("drm_lock() returned %d", result);
         hidl_cb(Error::UNSUPPORTED, nullptr);
     } else {
         hidl_cb(error, data);
@@ -189,48 +185,11 @@ Return<void> Mapper::lock(void* buffer, uint64_t cpuUsage, const IMapper::Rect& 
 }
 
 
-Return<void> Mapper::lockYCbCr(void* buffer, uint64_t cpuUsage, const IMapper::Rect& accessRegion,
-                  const hidl_handle& acquireFence, IMapper::lockYCbCr_cb hidl_cb) {
-    const native_handle_t* bufferHandle = static_cast<const native_handle_t*>(buffer);
-    if (!bufferHandle) {
-        hidl_cb(Error::BAD_BUFFER, YCbCrLayout{});
-        return Void();
-    }
+Return<void> Mapper::lockYCbCr(void* /*buffer*/, uint64_t /*cpuUsage*/, const IMapper::Rect& /*accessRegion*/,
+                  const hidl_handle& /*acquireFence*/, IMapper::lockYCbCr_cb hidl_cb) {
 
-    const auto pUsage = static_cast<gralloc1_producer_usage_t>(cpuUsage);
-    const auto cUsage = static_cast<gralloc1_consumer_usage_t>(cpuUsage
-            & ~static_cast<uint64_t>(BufferUsage::CPU_WRITE_MASK));
-    const auto usage = static_cast<int32_t>(pUsage | cUsage);
-
-    const auto accessRect = gralloc1_rect_t{accessRegion.left, accessRegion.top,
-                 accessRegion.width, accessRegion.height};
-
-    base::unique_fd fenceFd;
-    Error error = getFenceFd(acquireFence, &fenceFd);
-    if (error != Error::NONE) {
-        hidl_cb(error, YCbCrLayout{});
-        return Void();
-    }
-    sp<Fence> aFence{new Fence(fenceFd.release())};
-    aFence->waitForever("Mapper::lockYCbCr");
-
-    android_ycbcr ycbcr = {};
-    int result = gbm_mod_lock_ycbcr(mModule, bufferHandle, usage, accessRect.left, accessRect.top,
-            accessRect.width, accessRect.height, &ycbcr);
-
-    if (result != 0) {
-    	ALOGE("gbm_mod_lock_ycbcr() returned %d", result);
-        hidl_cb(Error::UNSUPPORTED, YCbCrLayout{});
-    } else {
-        YCbCrLayout layout{};
-        layout.y = ycbcr.y;
-        layout.cb = ycbcr.cb;
-        layout.cr = ycbcr.cr;
-        layout.yStride = ycbcr.ystride;
-        layout.cStride = ycbcr.cstride;
-        layout.chromaStep = ycbcr.chroma_step;
-        hidl_cb(error, layout);
-    }
+    ALOGE("lock_ycbcr() unsupported");
+    hidl_cb(Error::UNSUPPORTED, YCbCrLayout{});
     return Void();
 }
 
@@ -251,7 +210,7 @@ Return<void> Mapper::unlock(void* buffer, IMapper::unlock_cb hidl_cb) {
         return Void();
     }
 
-    int result = gbm_mod_unlock(mModule, bufferHandle);
+    int result = drm_unlock(bufferHandle);
 	if (result != 0) {
 		ALOGE("gralloc0 unlock failed: %d", result);
         hidl_cb(Error::UNSUPPORTED, nullptr);

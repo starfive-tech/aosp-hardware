@@ -1,8 +1,7 @@
 cc_library_static {
-    name: "libgbm_gralloc",
+    name: "libdrm_gralloc",
     srcs: [
-        "gralloc_gbm.cpp",
-        "gbm_module.cpp",
+        "drm_gralloc.cpp",
     ],
     export_include_dirs: ["."],
     shared_libs: [
@@ -10,9 +9,6 @@ cc_library_static {
         "libcutils",
         "libdrm",
         "liblog",
-    ],
-    static_libs: [
-        "libgbm_mesa",
     ],
     header_libs: [
         "libhardware_headers",

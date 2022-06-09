@@ -16,8 +16,7 @@ cc_library_shared {
         "libdrm",
     ],
     static_libs: [
-        "libgbm_mesa",
-        "libgbm_gralloc",
+        "libdrm_gralloc",
     ],
     header_libs: [
         "android.hardware.graphics.mapper@2.0-passthrough_headers",

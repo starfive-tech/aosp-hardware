@@ -1,7 +1,4 @@
 /*
- * Copyright (C) 2010-2011 Chia-I Wu <olvaffe@gmail.com>
- * Copyright (C) 2010-2011 LunarG Inc.
- * Copyright (C) 2016 Linaro, Ltd., Rob Herring <robh@kernel.org>
  * Copyright (C) 2022 Android-RPi Project
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -25,26 +22,13 @@
 
 #pragma once
 
-#include <cutils/native_handle.h>
+#include <drm_handle.h>
 
-struct gbm_device;
-struct gbm_bo;
+int drm_alloc(int kms_fd, int w, int h, int format, int usage,
+        buffer_handle_t *handle, int *stride);
+int drm_register(int kms_fd, buffer_handle_t handle);
 
-int gralloc_gbm_get_bpp(int format);
+int drm_lock(buffer_handle_t handle, int usage, int x, int y, int w, int h, void **addr);
+int drm_unlock(buffer_handle_t handle);
 
-int gralloc_gbm_handle_register(buffer_handle_t handle, struct gbm_device *gbm);
-int gralloc_gbm_handle_unregister(buffer_handle_t handle);
-
-buffer_handle_t gralloc_gbm_bo_create(struct gbm_device *gbm,
-		int width, int height, int format, int usage, int *stride);
-void gbm_free(buffer_handle_t handle);
-
-struct gbm_bo *gralloc_gbm_bo_from_handle(buffer_handle_t handle);
-
-int gralloc_gbm_bo_lock(buffer_handle_t handle, int usage, int x, int y, int w, int h, void **addr);
-int gralloc_gbm_bo_unlock(buffer_handle_t handle);
-int gralloc_gbm_bo_lock_ycbcr(buffer_handle_t handle, int usage,
-		int x, int y, int w, int h, struct android_ycbcr *ycbcr);
-
-struct gbm_device *gbm_dev_create(void);
-void gbm_dev_destroy(struct gbm_device *gbm);
+void drm_free(int kms_fd, buffer_handle_t handle);

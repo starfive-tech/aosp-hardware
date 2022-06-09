@@ -15,13 +15,16 @@
  */
 
 #define LOG_TAG "allocator@2.0-Allocator"
-//#define LOG_NDEBUG 0
+#define LOG_NDEBUG 0
 #include <android-base/logging.h>
 #include <utils/Log.h>
+#include <cutils/properties.h>
 #include <grallocusage/GrallocUsageConversion.h>
 
 #include <hardware/gralloc1.h>
-#include "gbm_module.h"
+
+#include <drm_gralloc.h>
+
 #include "Allocator.h"
 
 namespace android {
@@ -32,20 +35,20 @@ namespace V2_0 {
 namespace implementation {
 
 Allocator::Allocator() {
-    ALOGV("Constructing");
-    mModule = new gbm_module_t;
-    mModule->gbm = nullptr;
-    int error = gbm_mod_init(mModule);
-    if (error) {
-        ALOGE("Failed Allocator()) %d", error);
+    ALOGV("Allocator()");
+    char path[PROPERTY_VALUE_MAX];
+    property_get("gralloc.drm.kms", path, "/dev/dri/card0");
+
+    kms_fd = open(path, O_RDWR | O_CLOEXEC);
+    if (kms_fd < 0) {
+        ALOGE("failed to open %s", path);
     }
 }
 
 Allocator::~Allocator() {
-	ALOGV("Destructing");
-    if (mModule != nullptr) {
-        gbm_mod_deinit(mModule);
-        delete mModule;
+	ALOGV("~Allocator()");
+    if (kms_fd >= 0) {
+        close(kms_fd);
     }
 }
 
@@ -114,11 +117,11 @@ Error Allocator::allocateOneBuffer(
 
     ALOGV("Calling alloc(%u, %u, %i, %u)", descInfo.width,
             descInfo.height, descInfo.format, usage);
-    auto error = gbm_mod_alloc(mModule, static_cast<int>(descInfo.width),
+    auto error = drm_alloc(kms_fd, static_cast<int>(descInfo.width),
             static_cast<int>(descInfo.height), static_cast<int>(descInfo.format),
             usage, &handle, &stride);
     if (error != 0) {
-        ALOGE("gbm_mod_alloc() failed: %d (%s)", error, strerror(-error));
+        ALOGE("drm_alloc() failed: %d (%s)", error, strerror(-error));
         return Error::NO_RESOURCES;
     }
     *outBufferHandle = handle;
@@ -171,10 +174,9 @@ Return<void> Allocator::allocate(const BufferDescriptor& descriptor,
 
 void Allocator::freeBuffers(const std::vector<const native_handle_t*>& buffers) {
     for (auto buffer : buffers) {
-    	int result = gbm_mod_free(mModule, buffer);
-    	if (result != 0) {
-    		ALOGE("gbm_mod_free() failed: %d", result);
-    	}
+    	drm_free(kms_fd, buffer);
+        native_handle_close(buffer);
+        delete buffer;
     }
 }
 

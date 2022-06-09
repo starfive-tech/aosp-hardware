@@ -177,7 +177,7 @@ int32_t Hwc2Device::presentDisplay(hwc2_display_t displayId, int32_t* outRetireF
         return HWC2_ERROR_NOT_VALIDATED;
     }
     ALOGV("presentDisplay(%p)", mBuffer);
-    mHwcContext->hwc_post(displayId, mBuffer);
+    mHwcContext->hwc_post(mBuffer);
     *outRetireFence = -1;
     return HWC2_ERROR_NONE;
 }
@@ -248,10 +248,6 @@ int32_t Hwc2Device::registerCallback(int32_t intDesc, hwc2_callback_data_t callb
         case HWC2_CALLBACK_HOTPLUG:
             if (pointer) {
                 reinterpret_cast<HWC2_PFN_HOTPLUG>(pointer)(callbackData, 0,
-                                                            HWC2_CONNECTION_CONNECTED);
-
-                if (mHwcContext->is_display2_active())
-                    reinterpret_cast<HWC2_PFN_HOTPLUG>(pointer)(callbackData, 1,
                                                             HWC2_CONNECTION_CONNECTED);
             }
             break;
@@ -393,7 +389,7 @@ void Hwc2Device::VsyncThread::vsyncLoop() {
         lock.lock();
 
         if (fire) {
-            ALOGV("VsyncThread(%" PRId64 ")", mNextVsync);
+	    //ALOGV("VsyncThread(%" PRId64 ")", mNextVsync);
             if (mCallback) {
                 mCallback(mCallbackData, 0, mNextVsync);
             }
