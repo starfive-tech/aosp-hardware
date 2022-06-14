@@ -1,9 +1,9 @@
 cc_binary {
-    name: "android.hardware.graphics.composer@2.1-service.rpi4",
+    name: "android.hardware.graphics.composer@2.1-service.arv",
     vendor: true,
     proprietary: true,
     relative_install_path: "hw",
-    init_rc: ["android.hardware.graphics.composer@2.1-service.rpi4.rc"],
+    init_rc: ["android.hardware.graphics.composer@2.1-service.arv.rc"],
     shared_libs: [
         "android.hardware.graphics.composer@2.1",
         "android.hardware.graphics.composer@2.1-resources",

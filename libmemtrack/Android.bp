@@ -1,8 +1,8 @@
 cc_library_shared {
-    name: "memtrack.rpi4",
+    name: "memtrack.arv",
     relative_install_path: "hw",
     proprietary: true,
-    srcs: ["memtrack_rpi.c"],
+    srcs: ["memtrack_arv.c"],
     cflags: ["-Wconversion", "-Wall", "-Werror"],
     include_dirs: [
         "hardware/libhardware/include",

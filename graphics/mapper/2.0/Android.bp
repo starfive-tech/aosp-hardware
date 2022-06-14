@@ -1,5 +1,5 @@
 cc_library_shared {
-    name: "android.hardware.graphics.mapper@2.0-impl.rpi4",
+    name: "android.hardware.graphics.mapper@2.0-impl.arv",
     vendor: true,
     proprietary: true,
     relative_install_path: "hw",

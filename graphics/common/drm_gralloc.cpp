@@ -21,7 +21,7 @@
  */
 
 #define LOG_TAG "drm_gralloc"
-#define LOG_NDEBUG 0
+//#define LOG_NDEBUG 0
 #include <utils/Log.h>
 #include <cutils/properties.h>
 #include <sys/errno.h>
@@ -83,7 +83,7 @@ static buffer_handle_t drm_create(int kms_fd,
         ALOGE("failed CREATE_DUMB : %s", strerror(errno));
     	return NULL;
     } 
-    ALOGI("CREATE_DUMB size: %lld , handle: %x ", carg.size, carg.handle);
+    ALOGV("CREATE_DUMB size: %lld , handle: %x ", carg.size, carg.handle);
 
     struct drm_mode_map_dumb marg;
     memset (&marg, 0, sizeof (marg));

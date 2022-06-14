@@ -73,7 +73,6 @@ int hwc_context::bo_add_fb(const private_handle_t *bo)
 	uint32_t pitches[4] = { 0, 0, 0, 0 };
 	uint32_t offsets[4] = { 0, 0, 0, 0 };
 	uint32_t handles[4] = { 0, 0, 0, 0 };
-	uint64_t modifiers[4] = { 0, 0, 0, 0 };
 
    	uint32_t width = (uint32_t)primary_output.mode.hdisplay;
    	uint32_t height = (uint32_t)primary_output.mode.vdisplay;
@@ -88,7 +87,6 @@ int hwc_context::bo_add_fb(const private_handle_t *bo)
 
 	pitches[0] = width * 4;
 	handles[0] = handle;
-	modifiers[0] = DRM_FORMAT_MOD_LINEAR;
 
     int drm_format = drm_format_from_hal(format);
 	if (drm_format == 0) {
@@ -97,12 +95,9 @@ int hwc_context::bo_add_fb(const private_handle_t *bo)
 	}
 
 	ALOGV("bo_add_fb() width:%d height:%d format:%x handle:%d pitch:%d",
-			width, height,
-					drm_format, handle, pitches[0]);
-	return drmModeAddFB2WithModifiers(kms_fd,
-		width, height,
-		drm_format, handles, pitches, offsets, modifiers,
-		(uint32_t *)&(bo->fb_id), DRM_MODE_FB_MODIFIERS);
+			width, height, drm_format, handle, pitches[0]);
+	return drmModeAddFB2(kms_fd, width, height, drm_format,
+			     handles, pitches, offsets,	(uint32_t *)&(bo->fb_id), 0);
 }
 
 /*
@@ -491,12 +486,6 @@ static drmModeModeInfoPtr find_mode(drmModeConnectorPtr connector)
 		/* fallback to the first mode */
 		if (!mode)
 			mode = &connector->modes[0];
-	}
-
-	if ((74200 <= mode->clock) && (mode->clock < 74500)) {
-		// Avoid interference with Wifi
-		ALOGV("Trim display clock from %d to 75000", mode->clock);
-		mode->clock = 75000;
 	}
 
 	ALOGV("Established mode:");
