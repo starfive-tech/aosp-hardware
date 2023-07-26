@@ -24,11 +24,11 @@
 
 #include <drm_handle.h>
 
-int drm_alloc(int kms_fd, int w, int h, int format, int usage,
+int drm_alloc(int kms_fd, int w, int h, int format, uint64_t usage,
         buffer_handle_t *handle, int *stride);
 int drm_register(int kms_fd, buffer_handle_t handle);
 
-int drm_lock(buffer_handle_t handle, int usage, int x, int y, int w, int h, void **addr);
+int drm_lock(buffer_handle_t handle, void **addr);
 int drm_unlock(buffer_handle_t handle);
 
 void drm_free(int kms_fd, buffer_handle_t handle);

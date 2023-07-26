@@ -30,7 +30,7 @@ struct kms_output
 	uint32_t pipe;
 	drmModeModeInfo mode;
 	int xdpi, ydpi;
-	int fb_format;
+	uint32_t drm_format;
 	int bpp;
 	uint32_t active;
 };
@@ -60,7 +60,7 @@ class hwc_context {
     void init_features();
     int bo_post(const private_handle_t *bo);
     void wait_for_post(int flip);
-    int set_crtc(struct kms_output *output, int fb_id);
+    int set_crtc(struct kms_output *output, uint32_t fb_id);
     int bo_add_fb(const private_handle_t *bo);
 
 	int kms_fd;

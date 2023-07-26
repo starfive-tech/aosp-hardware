@@ -19,10 +19,8 @@
 #include <android-base/logging.h>
 #include <utils/Log.h>
 #include <cutils/properties.h>
-#include <grallocusage/GrallocUsageConversion.h>
 
 #include <hardware/gralloc1.h>
-
 #include <drm_gralloc.h>
 
 #include "Allocator.h"
@@ -110,18 +108,17 @@ Error Allocator::allocateOneBuffer(
 		const IMapper::BufferDescriptorInfo& descInfo,
         buffer_handle_t* outBufferHandle, uint32_t* outStride)
 {
-    int usage = android_convertGralloc1To0Usage(
-    		toProducerUsage(descInfo.usage), toConsumerUsage(descInfo.usage));
+    uint64_t usage = toProducerUsage(descInfo.usage) | toConsumerUsage(descInfo.usage);
     buffer_handle_t handle = nullptr;
     int stride = 0;
 
-    ALOGV("Calling alloc(%u, %u, %i, %u)", descInfo.width,
+    ALOGV("Calling alloc(%u, %u, %i, %lx)", descInfo.width,
             descInfo.height, descInfo.format, usage);
     auto error = drm_alloc(kms_fd, static_cast<int>(descInfo.width),
             static_cast<int>(descInfo.height), static_cast<int>(descInfo.format),
             usage, &handle, &stride);
     if (error != 0) {
-        ALOGE("drm_alloc() failed: %d (%s)", error, strerror(-error));
+        ALOGE("allocateOneBuffer() failed: %d (%s)", error, strerror(-error));
         return Error::NO_RESOURCES;
     }
     *outBufferHandle = handle;

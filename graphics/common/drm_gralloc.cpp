@@ -33,7 +33,7 @@
 #include <xf86drmMode.h>
 #include <drm_fourcc.h>
 
-#include <hardware/gralloc.h>
+#include <hardware/gralloc1.h>
 
 #include "drm_gralloc.h"
 
@@ -71,7 +71,7 @@ static int get_bpp(int format)
 }
 
 static buffer_handle_t drm_create(int kms_fd,
-		int width, int height, int usage, int *stride) {
+		int width, int height, uint64_t usage, int *stride) {
     struct drm_mode_create_dumb carg;
     memset (&carg, 0, sizeof (carg));
     carg.bpp = 32;
@@ -108,7 +108,7 @@ static buffer_handle_t drm_create(int kms_fd,
 
 
 	private_handle_t *handle = new private_handle_t(prime_fd, carg.size,
-	    (usage & GRALLOC_USAGE_HW_FB)?private_handle_t::PRIV_FLAGS_FRAMEBUFFER:0);
+	    (usage & GRALLOC1_CONSUMER_USAGE_CLIENT_TARGET)?private_handle_t::PRIV_FLAGS_FRAMEBUFFER:0);
 	handle->base = (intptr_t)map;
 	handle->drm_handle = carg.handle;
 
@@ -118,7 +118,7 @@ static buffer_handle_t drm_create(int kms_fd,
 	return handle;
 }
 
-int drm_alloc(int kms_fd, int w, int h, int format, int usage,
+int drm_alloc(int kms_fd, int w, int h, int format, uint64_t usage,
 		buffer_handle_t *handle, int *stride) {
 	int err = 0;
 	int bpp = get_bpp(format);
@@ -131,7 +131,7 @@ int drm_alloc(int kms_fd, int w, int h, int format, int usage,
 	if (!*handle)
 		err = -errno;
 
-	ALOGV("buffer %p usage = %08x", *handle, usage);
+	ALOGV("buffer %p usage = %08lxx", *handle, usage);
 	return err;
 }
 
@@ -165,9 +165,7 @@ int drm_register(int kms_fd, buffer_handle_t _handle)
 }
 
 
-int drm_lock(buffer_handle_t handle,
-		int /*usage*/, int /*x*/, int /*y*/, int /*w*/, int /*h*/,
-		void **addr)
+int drm_lock(buffer_handle_t handle, void **addr)
 {
     if (private_handle_t::validate(handle) < 0)
         return -EINVAL;
