@@ -40,7 +40,7 @@
 #define DEFAULT_PERIOD_SIZE  1024
 #define DEFAULT_PERIOD_COUNT 4
 
-#define STUB_DEFAULT_SAMPLE_RATE   16000
+#define STUB_DEFAULT_SAMPLE_RATE   48000
 #define STUB_DEFAULT_AUDIO_FORMAT  AUDIO_FORMAT_PCM_16_BIT
 
 #define STUB_INPUT_BUFFER_MILLISECONDS  20
@@ -444,8 +444,8 @@ static int adev_open_output_stream(struct audio_hw_device *dev,
 
     *stream_out = NULL;
 
-    int ret = check_output_config(config);
-    if (ret != 0) return ret;
+	check_output_config(config);
+
 
     struct stub_stream_out *out =
             (struct stub_stream_out *)calloc(1, sizeof(struct stub_stream_out));
