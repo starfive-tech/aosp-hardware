@@ -14,48 +14,22 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "allocator@2.0-Allocator"
+#define LOG_TAG "allocator-Allocator"
 //#define LOG_NDEBUG 0
 #include <android-base/logging.h>
 #include <utils/Log.h>
 #include <cutils/properties.h>
 
+#include <aidl/android/hardware/graphics/allocator/AllocationError.h>
+#include <aidlcommonsupport/NativeHandle.h>
+#include <android/binder_ibinder.h>
+#include <android/binder_status.h>
+
+#include <gralloctypes/Gralloc4.h>
 #include <hardware/gralloc1.h>
 #include <drm_gralloc.h>
 
 #include "Allocator.h"
-
-namespace android {
-namespace hardware {
-namespace graphics {
-namespace allocator {
-namespace V2_0 {
-namespace implementation {
-
-Allocator::Allocator() {
-    ALOGV("Allocator()");
-    char path[PROPERTY_VALUE_MAX];
-    property_get("gralloc.drm.kms", path, "/dev/dri/card0");
-
-    kms_fd = open(path, O_RDWR | O_CLOEXEC);
-    if (kms_fd < 0) {
-        ALOGE("failed to open %s", path);
-    }
-}
-
-Allocator::~Allocator() {
-	ALOGV("~Allocator()");
-    if (kms_fd >= 0) {
-        close(kms_fd);
-    }
-}
-
-Return<void> Allocator::dumpDebugInfo(dumpDebugInfo_cb hidl_cb) {
-    std::vector<char> buf(1);
-    buf[0] = '\0';
-	hidl_cb(buf.data());
-    return Void();
-}
 
 static gralloc1_producer_usage_t toProducerUsage(uint64_t usage) {
     uint64_t producerUsage = usage & ~static_cast<uint64_t>(
@@ -104,69 +78,51 @@ static gralloc1_consumer_usage_t toConsumerUsage(uint64_t usage) {
     return (gralloc1_consumer_usage_t)consumerUsage;
 }
 
-Error Allocator::allocateOneBuffer(
-		const IMapper::BufferDescriptorInfo& descInfo,
-        buffer_handle_t* outBufferHandle, uint32_t* outStride)
-{
-    uint64_t usage = toProducerUsage(descInfo.usage) | toConsumerUsage(descInfo.usage);
+
+namespace arpi::allocator {
+
+unsigned long callingPid() {
+    return static_cast<unsigned long>(AIBinder_getCallingPid());
+}
+
+Allocator::Allocator() {
+    ALOGV("Allocator()");
+    char path[PROPERTY_VALUE_MAX];
+    property_get("gralloc.drm.kms", path, "/dev/dri/card0");
+
+    kms_fd = open(path, O_RDWR | O_CLOEXEC);
+    if (kms_fd < 0) {
+        ALOGE("failed to open %s", path);
+    }
+}
+
+Allocator::~Allocator() {
+	ALOGV("~Allocator()");
+    if (kms_fd >= 0) {
+        close(kms_fd);
+    }
+}
+
+ndk::ScopedAStatus Allocator::allocateOneBuffer(const BufferDescriptorInfo& descriptor,
+                                            buffer_handle_t* outBufferHandle,
+                                            uint32_t* outStride) {
+
+    uint64_t usage = toProducerUsage(descriptor.usage) | toConsumerUsage(descriptor.usage);
     buffer_handle_t handle = nullptr;
     int stride = 0;
 
-    ALOGV("Calling alloc(%u, %u, %i, %lx)", descInfo.width,
-            descInfo.height, descInfo.format, usage);
-    auto error = drm_alloc(kms_fd, static_cast<int>(descInfo.width),
-            static_cast<int>(descInfo.height), static_cast<int>(descInfo.format),
+    ALOGV("Calling alloc(%u, %u, %i, %lx)", descriptor.width,
+            descriptor.height, descriptor.format, usage);
+    auto error = drm_alloc(kms_fd, static_cast<int>(descriptor.width),
+            static_cast<int>(descriptor.height), static_cast<int>(descriptor.format),
             usage, &handle, &stride);
     if (error != 0) {
         ALOGE("allocateOneBuffer() failed: %d (%s)", error, strerror(-error));
-        return Error::NO_RESOURCES;
+        return ndk::ScopedAStatus::fromStatus(error);
     }
     *outBufferHandle = handle;
     *outStride = stride;
-    return Error::NONE;
-}
-
-Return<void> Allocator::allocate(const BufferDescriptor& descriptor,
-        uint32_t count, IAllocator::allocate_cb hidl_cb) {
-    IMapper::BufferDescriptorInfo descInfo;
-    if (!grallocDecodeBufferDescriptor(descriptor, &descInfo)) {
-        hidl_cb(Error::BAD_DESCRIPTOR, 0, hidl_vec<hidl_handle>());
-        return Void();
-    }
-
-    uint32_t stride = 0;
-    std::vector<const native_handle_t*> buffers;
-    buffers.reserve(count);
-
-    Error error = Error::NONE;
-    for (uint32_t i = 0; i < count; i++) {
-        const native_handle_t* tmpBuffer;
-        uint32_t tmpStride;
-
-        error = allocateOneBuffer(descInfo, &tmpBuffer, &tmpStride);
-        if (error != Error::NONE) {
-            break;
-        }
-        buffers.push_back(tmpBuffer);
-        if (stride == 0) {
-            stride = tmpStride;
-        } else if (stride != tmpStride) {
-            error = Error::UNSUPPORTED;
-            break;
-        }
-    }
-
-    if (error != Error::NONE) {
-        freeBuffers(buffers);
-        hidl_cb(error, 0, hidl_vec<hidl_handle>());
-        return Void();
-    }
-
-    hidl_vec<hidl_handle> hidlBuffers(buffers.cbegin(), buffers.cend());
-    hidl_cb(Error::NONE, stride, hidlBuffers);
-
-    freeBuffers(buffers);
-    return Void();
+    return ndk::ScopedAStatus::ok();
 }
 
 void Allocator::freeBuffers(const std::vector<const native_handle_t*>& buffers) {
@@ -177,9 +133,52 @@ void Allocator::freeBuffers(const std::vector<const native_handle_t*>& buffers) 
     }
 }
 
-}  // namespace implementation
-}  // namespace V2_0
-}  // namespace allocator
-}  // namespace graphics
-}  // namespace hardware
-}  // namespace android
+ndk::ScopedAStatus Allocator::allocate(const std::vector<uint8_t>& descriptor, int32_t count,
+                                              AidlAllocator::AllocationResult* outResult) {
+    ALOGV("Allocation request from process: %lu", callingPid());
+
+    BufferDescriptorInfo descriptorInfo;
+    int ret = ::android::gralloc4::decodeBufferDescriptorInfo(descriptor, &descriptorInfo);
+    if (ret) {
+        ALOGE("Failed to allocate. Failed to decode buffer descriptor: %d.\n", ret);
+        return ndk::ScopedAStatus::fromStatus(ret);
+    }
+
+    uint32_t stride = 0;
+    std::vector<const native_handle_t*> buffers;
+    buffers.reserve(count);
+
+    for (int32_t i = 0; i < count; i++) {
+        const native_handle_t* tmpBuffer;
+        uint32_t tmpStride;
+
+        ndk::ScopedAStatus status = allocateOneBuffer(descriptorInfo, &tmpBuffer, &tmpStride);
+
+        if (!status.isOk()) {
+            freeBuffers(buffers);
+            return status;
+        }
+
+        buffers.push_back(tmpBuffer);
+
+        if (stride == 0) {
+            stride = tmpStride;
+        } else if (stride != tmpStride) {
+            freeBuffers(buffers);
+            return ndk::ScopedAStatus::fromStatus(STATUS_UNKNOWN_ERROR);
+        }
+    }
+
+    outResult->buffers.resize(count);
+    outResult->stride = stride;
+
+    for (int32_t i = 0; i < count; i++) {
+        auto handle = buffers[i];
+        outResult->buffers[i] = ::android::dupToAidl(handle);
+    }
+    freeBuffers(buffers);
+
+    return ndk::ScopedAStatus::ok();
+}
+
+} // namespace arpi::allocator

@@ -1,29 +1,33 @@
-cc_binary {
-    name: "android.hardware.graphics.allocator@2.0-service.arv",
+cc_library_shared {
+    name: "android.hardware.graphics.mapper@4.0-impl.arv",
     vendor: true,
     proprietary: true,
     relative_install_path: "hw",
-    init_rc: ["android.hardware.graphics.allocator@2.0-service.arv.rc"],
     shared_libs: [
-        "android.hardware.graphics.allocator@2.0",
+        "android.hardware.graphics.mapper@4.0",
+        "android.hardware.graphics.common@1.0",
+        "libgralloctypes",
         "libhidlbase",
+        "libhardware",
         "libbase",
         "libutils",
         "libcutils",
         "liblog",
+        "libsync",
         "libdrm",
     ],
     static_libs: [
         "libdrm_gralloc",
     ],
     header_libs: [
-        "android.hardware.graphics.mapper@2.0-passthrough_headers",
-        "libhardware_headers",
         "libdrm_headers",
     ],
+    include_dirs: [
+        "system/core/libsync/include",
+    ],
     srcs: [
-        "Allocator.cpp",
-        "service.cpp",
+        "Mapper.cpp",
+        "Fence.cpp",
     ],
     cflags: [
         "-Wall",

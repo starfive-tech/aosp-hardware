@@ -1,7 +1,7 @@
 /*
- * Copyright (C) 2010-2011 Chia-I Wu <olvaffe@gmail.com>
+ * Copyright (C) 2010-2011 Chia-I Wu
  * Copyright (C) 2010-2011 LunarG Inc.
- * Copyright (C) 2020-2022 Android-RPi Project
+ * Copyright (C) 2020-2023 Android-RPi Project
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,7 +22,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#define LOG_TAG "composer@2.1-hwc_context"
+#define LOG_TAG "composer-hwc_context"
 //#define LOG_NDEBUG 0
 #include <cutils/properties.h>
 #include <utils/Log.h>
@@ -41,247 +41,138 @@
 
 #include "hwc_context.h"
 
-namespace android {
+namespace aidl::android::hardware::graphics::composer3::impl {
 
-/*
- * Add a fb object for a bo.
- */
-int hwc_context::bo_add_fb(const private_handle_t *bo)
+int hwc_context::add_fb(const private_handle_t *hnd)
 {
-	if (bo->fb_id)
+	if (hnd->fb_id)
 		return 0;
 
 	uint32_t pitches[4] = { 0, 0, 0, 0 };
 	uint32_t offsets[4] = { 0, 0, 0, 0 };
 	uint32_t handles[4] = { 0, 0, 0, 0 };
 
-   	uint32_t width = (uint32_t)primary_output.mode.hdisplay;
-   	uint32_t height = (uint32_t)primary_output.mode.vdisplay;
-   	uint32_t drm_format = primary_output.drm_format;
+        uint32_t width = (uint32_t)primary_output.mode.hdisplay;
+        uint32_t height = (uint32_t)primary_output.mode.vdisplay;
+        uint32_t drm_format = primary_output.drm_format;
 
 	uint32_t handle;
-	int ret = drmPrimeFDToHandle(kms_fd, bo->fd, &handle);
+	int ret = drmPrimeFDToHandle(kms_fd, hnd->fd, &handle);
 	if (ret != 0) {
-		ALOGE("bo_add_fb() error drmPrimeFDToHandle()");
+		ALOGE("add_fb() error drmPrimeFDToHandle()");
 		return ret;
 	}
 
 	pitches[0] = width * 4;
 	handles[0] = handle;
 
-	ALOGV("bo_add_fb() width:%d height:%d format:%x handle:%d pitch:%d",
+	ALOGV("add_fb() width:%d height:%d format:%x handle:%d pitch:%d",
 			width, height, drm_format, handle, pitches[0]);
 	return drmModeAddFB2(kms_fd, width, height, drm_format,
-			     handles, pitches, offsets,	(uint32_t *)&(bo->fb_id), 0);
+                             handles, pitches, offsets, (uint32_t *)&hnd->fb_id, 0);
 }
 
-/*
- * Program CRTC.
- */
-int hwc_context::set_crtc(struct kms_output *output, uint32_t fb_id)
-{
-	int ret;
 
-	ret = drmModeSetCrtc(kms_fd, output->crtc_id, fb_id,
-			0, 0, &output->connector_id, 1, &output->mode);
-	if (ret) {
-		ALOGE("failed to set crtc (%s) (crtc_id %d, fb_id %d, conn %d, mode %dx%d)",
-			strerror(errno), output->crtc_id, fb_id, output->connector_id,
-			output->mode.hdisplay, output->mode.vdisplay);
-		return ret;
-	}
+static int64_t get_property_value(int fd, drmModeObjectPropertiesPtr props,
+				  const char *name) {
+	drmModePropertyPtr prop;
+	uint64_t value;
 
-	return ret;
-}
-
-/*
- * Callback for a page flip event.
- */
-static void page_flip_handler(int /*fd*/, unsigned int /*sequence*/,
-			      unsigned int /*tv_sec*/, unsigned int /*tv_usec*/,
-		void *user_data)
-{
-	class hwc_context *ctx = (class hwc_context *) user_data;
-
-	/* ack the last scheduled flip */
-	ctx->current_front = ctx->next_front;
-	ctx->next_front = NULL;
-}
-
-/*
- * Schedule a page flip.
- */
-int hwc_context::page_flip(const private_handle_t *bo)
-{
-	int ret;
-
-	/* there is another flip pending */
-	while (next_front) {
-		waiting_flip = 1;
-		drmHandleEvent(kms_fd, &evctx);
-		waiting_flip = 0;
-		if (next_front) {
-			/* record an error and break */
-			ALOGE("drmHandleEvent returned without flipping");
-			current_front = next_front;
-			next_front = NULL;
+	bool found = false;
+	for (int j = 0; j < props->count_props && !found; j++) {
+		prop = drmModeGetProperty(fd, props->props[j]);
+		if (!strcmp(prop->name, name)) {
+			value = props->prop_values[j];
+			found = true;
 		}
+		drmModeFreeProperty(prop);
 	}
 
-	if (!bo)
+	if (!found)
+		return -1;
+	return value;
+}
+
+static uint32_t get_property_id(int fd, drmModeObjectPropertiesPtr props,
+				   const char *name) {
+	drmModePropertyPtr prop;
+	uint32_t prop_id = 0;
+
+	bool found = false;
+	for (int j = 0; j < props->count_props && !found; j++) {
+		prop = drmModeGetProperty(fd, props->props[j]);
+		if (!strcmp(prop->name, name)) {
+		    prop_id = prop->prop_id;
+			found = true;
+		}
+		drmModeFreeProperty(prop);
+	}
+	return prop_id;
+}
+
+
+int hwc_context::atomic_commit(struct kms_output *output, const private_handle_t *hnd, int32_t *out_fence)
+{
+	if (!hnd)
 		return 0;
 
-	ret = drmModePageFlip(kms_fd, primary_output.crtc_id, bo->fb_id,
-			DRM_MODE_PAGE_FLIP_EVENT, (void *) this);
-	if (ret) {
+	int ret = 0;
+	drmModeAtomicReq *req = drmModeAtomicAlloc();
+	drmModeAtomicAddProperty(req, output->crtc_id, output->prop_out_fence, uint64_t(out_fence));
+    drmModeAtomicAddProperty(req, output->plane_id, output->prop_fb_id, hnd->fb_id);
+    drmModeAtomicAddProperty(req, output->plane_id, output->prop_crtc_id, output->crtc_id);
+
+	uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_ATOMIC_NONBLOCK;
+	ret = drmModeAtomicCommit(kms_fd, req, flags, (void *)this);
+	if (ret < 0)  {
 		ALOGE("failed to perform page flip for primary (%s) (crtc %d fb %d))",
-			strerror(errno), primary_output.crtc_id, bo->fb_id);
+			strerror(errno), output->crtc_id, hnd->fb_id);
 		/* try to set mode for next frame */
 		if (errno != EBUSY)
 			first_post = 1;
-	}
-	else
-		next_front = bo;
+    }
 
-	return ret;
+	drmModeAtomicFree(req);
+	return ret < 0 ? ret : 0; 
 }
 
-/*
- * Wait for the next post.
- */
-void hwc_context::wait_for_post(int flip)
+int hwc_context::hwc_post(buffer_handle_t buffer, int32_t *out_fence)
 {
-	unsigned int current, target;
-	drmVBlank vbl;
-	int ret;
+    if (private_handle_t::validate(buffer) < 0)
+       return -EINVAL;
 
-	flip = !!flip;
+    private_handle_t const* hnd = reinterpret_cast<private_handle_t const*>(buffer);
 
-	memset(&vbl, 0, sizeof(vbl));
-	int type = DRM_VBLANK_RELATIVE;
-	vbl.request.type = (drmVBlankSeqType) type;
-	vbl.request.sequence = 0;
-
-	/* get the current vblank */
-	ret = drmWaitVBlank(kms_fd, &vbl);
-	if (ret) {
-		ALOGW("failed to get vblank");
-		return;
-	}
-
-	current = vbl.reply.sequence;
-	if (first_post)
-		target = current;
-	else
-		target = last_swap + swap_interval - flip;
-
-	/* wait for vblank */
-	if (current < target || !flip) {
-		memset(&vbl, 0, sizeof(vbl));
-		int type = DRM_VBLANK_ABSOLUTE;
-		if (!flip) {
-			type |= DRM_VBLANK_NEXTONMISS;
-			if (target < current)
-				target = current;
-		}
-                vbl.request.type = (drmVBlankSeqType) type;
-		vbl.request.sequence = target;
-
-		ret = drmWaitVBlank(kms_fd, &vbl);
-		if (ret) {
-			ALOGW("failed to wait vblank");
-			return;
-		}
-	}
-
-	last_swap = vbl.reply.sequence + flip;
-}
-
-/*
- * Post a bo.  This is not thread-safe.
- */
-int hwc_context::bo_post(const private_handle_t *bo)
-{
-	int ret;
-
-	if (!bo->fb_id) {
-		int err = bo_add_fb(bo);
+	if (!hnd->fb_id) {
+		int err = add_fb(hnd);
 		if (err) {
 			ALOGE("%s: could not create drm fb, (%s)",
 				__func__, strerror(-err));
-			ALOGE("unable to post bo %p without fb", bo);
+			ALOGE("unable to post %p without fb", hnd);
 			return err;
 		}
 	}
 
-	/* TODO spawn a thread to avoid waiting and race */
-
+	int ret;
 	if (first_post) {
-		ret = set_crtc(&primary_output, bo->fb_id);
+		ret = drmModeSetCrtc(kms_fd, primary_output.crtc_id, hnd->fb_id,
+			0, 0, &primary_output.connector_id, 1, &primary_output.mode);
 		if (!ret) {
 			first_post = 0;
-			current_front = bo;
-			if (next_front == bo)
-				next_front = NULL;
+		} else {
+			ALOGE("failed to set crtc (%s) (crtc_id %d, fb_id %d, conn %d, mode %dx%d)",
+			strerror(errno), primary_output.crtc_id, hnd->fb_id, primary_output.connector_id,
+			primary_output.mode.hdisplay, primary_output.mode.vdisplay);
 		}
+		*out_fence = -1;
 		return ret;
 	}
 
-	if (swap_interval > 1)
-		wait_for_post(1);
-	ret = page_flip(bo);
-	if (next_front) {
-		/*
-		 * wait if the driver says so or the current front
-		 * will be written by CPU
-		 */
-		page_flip(NULL);
-	}
+	ret = atomic_commit(&primary_output, hnd, out_fence);
+	ALOGV("hwc_post() fd %d, fb_id %d, out_fence %d",
+		hnd->fd, hnd->fb_id, *out_fence);
 
-	return ret;
-}
-
-static class hwc_context *ctx_singleton;
-
-static void on_signal(int /*sig*/)
-{
-	class hwc_context *ctx = ctx_singleton;
-
-	/* wait the pending flip */
-	if (ctx && ctx->next_front) {
-		/* there is race, but this function is hacky enough to ignore that */
-		if (ctx->waiting_flip)
-			usleep(100 * 1000); /* 100ms */
-		else
-			ctx->page_flip(NULL);
-	}
-
-	exit(-1);
-}
-
-void hwc_context::init_features()
-{
-	swap_interval = 1;
-
-	struct sigaction act;
-	memset(&evctx, 0, sizeof(evctx));
-	evctx.version = DRM_EVENT_CONTEXT_VERSION;
-	evctx.page_flip_handler = page_flip_handler;
-
-	/*
-	 * XXX GPU tends to freeze if the program is terminiated with a
-	 * flip pending.  What is the right way to handle the
-	 * situation?
-	 */
-	sigemptyset(&act.sa_mask);
-	act.sa_handler = on_signal;
-	act.sa_flags = 0;
-	sigaction(SIGINT, &act, NULL);
-	sigaction(SIGTERM, &act, NULL);
-
-	ctx_singleton = this;
-
-	ALOGV("will use flip for fb posting");
+    return ret;
 }
 
 #define MARGIN_PERCENT 1.8   /* % of active vertical image*/
@@ -470,7 +361,7 @@ int hwc_context::init_with_connector(struct kms_output *output,
 	drmModeEncoderPtr encoder;
 	drmModeModeInfoPtr mode;
 	static int used_crtcs = 0;
-	int i;
+	int i, j;
 
 	encoder = drmModeGetEncoder(kms_fd, connector->encoders[0]);
 	if (!encoder)
@@ -489,7 +380,39 @@ int hwc_context::init_with_connector(struct kms_output *output,
 	if (i == resources->count_crtcs)
 		return -EINVAL;
 
+	/* find primary plane id */
+	bool found_primary = false;
+	output->plane_id = 0;
+	for (j = 0; j < plane_resources->count_planes && !found_primary; j++) {
+		uint32_t plane_id = plane_resources->planes[j];
+		drmModePlanePtr plane = drmModeGetPlane(kms_fd, plane_resources->planes[j]);
+		if (!plane) {
+			ALOGW("drmModeGetPlane(%u) failed", plane_resources->planes[j]);
+			continue;
+		}
+		if (plane->possible_crtcs & (1 << i)) {
+			drmModeObjectPropertiesPtr props = drmModeObjectGetProperties(kms_fd,
+					plane_resources->planes[j], DRM_MODE_OBJECT_PLANE);
+			if (get_property_value(kms_fd, props, "type") == DRM_PLANE_TYPE_PRIMARY) {
+				found_primary = true;
+				output->plane_id = plane_id;
+				output->prop_fb_id = get_property_id(kms_fd, props, "FB_ID");
+				output->prop_crtc_id = get_property_id(kms_fd, props, "CRTC_ID");
+				ALOGI("found primary plane %u, fb %u, crtc %u", plane_id,
+				        output->prop_fb_id, output->prop_crtc_id);
+			}
+			drmModeFreeObjectProperties(props);
+		}
+		drmModeFreePlane(plane);
+	}
+
 	output->crtc_id = resources->crtcs[i];
+	drmModeObjectPropertiesPtr crtc_props = drmModeObjectGetProperties(kms_fd,
+			output->crtc_id, DRM_MODE_OBJECT_CRTC);
+	output->prop_out_fence = get_property_id(kms_fd, crtc_props, "OUT_FENCE_PTR");
+	ALOGI("prop_out_fence %u", output->prop_out_fence);
+	drmModeFreeObjectProperties(crtc_props);
+
 	output->connector_id = connector->connector_id;
 	output->pipe = i;
 
@@ -557,9 +480,27 @@ int hwc_context::init_kms()
 	drmModeConnectorPtr primary;
 	int i;
 
+	int ret = drmSetClientCap(kms_fd, DRM_CLIENT_CAP_UNIVERSAL_PLANES, 1);
+	if (ret) {
+		ALOGE("failed to set universal planes cap, %d", ret);
+		return ret;
+	}
+
+	ret = drmSetClientCap(kms_fd, DRM_CLIENT_CAP_ATOMIC, 1);
+	if (ret) {
+		ALOGE("failed to set atomic cap, %d", ret);
+		return ret;
+	}
+
 	resources = drmModeGetResources(kms_fd);
 	if (!resources) {
 		ALOGE("failed to get modeset resources");
+		return -EINVAL;
+	}
+
+	plane_resources = drmModeGetPlaneResources(kms_fd);
+	if (!plane_resources) {
+		ALOGE("failed to get plane resources");
 		return -EINVAL;
 	}
 
@@ -610,7 +551,6 @@ int hwc_context::init_kms()
 		}
 	}
 
-	init_features();
 	first_post = 1;
 	return 0;
 }
@@ -620,7 +560,7 @@ hwc_context::hwc_context() {
     property_get("gralloc.drm.kms", path, "/dev/dri/card0");
 
     fps = 60.0;
-    kms_fd = open(path, O_RDWR);
+    kms_fd = open(path, O_RDWR|O_CLOEXEC);
    	if (kms_fd > 0) {
    		int error = init_kms();
    	    if (error != 0) {
@@ -638,19 +578,5 @@ hwc_context::hwc_context() {
     }
 }
 
-int hwc_context::hwc_post(buffer_handle_t buffer)
-{
-    if (private_handle_t::validate(buffer) < 0)
-       return -EINVAL;
-
-    private_handle_t const* hnd = reinterpret_cast<private_handle_t const*>(buffer);
-
-	ALOGV("hwc_post() fd %d, fb_id %d, fb_base %lx",
-		hnd->fd, hnd->fb_id, hnd->base);
-
-
-    return bo_post(hnd);
-}
-
-} // namespace anroid
+} // namespace aidl::android::hardware::graphics::composer3::impl
 

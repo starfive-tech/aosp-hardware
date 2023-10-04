@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Android-RPi Project
+ * Copyright 2023 Android-RPi Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "mapper@2.0-Mapper"
+#define LOG_TAG "mapper@4.0-Mapper"
 //#define LOG_NDEBUG 0
 #include <android-base/logging.h>
 #include <utils/Log.h>
 #include <inttypes.h>
 #include <cutils/properties.h>
-#include <mapper-passthrough/2.0/GrallocBufferDescriptor.h>
+#include <gralloctypes/Gralloc4.h>
 #include <hardware/gralloc1.h>
 
 #include <drm_gralloc.h>
@@ -30,7 +30,7 @@ namespace android {
 namespace hardware {
 namespace graphics {
 namespace mapper {
-namespace V2_0 {
+namespace V4_0 {
 namespace implementation {
 
 Mapper::Mapper() {
@@ -81,8 +81,12 @@ Return<void> Mapper::createDescriptor(const IMapper::BufferDescriptorInfo& descr
             ALOGW("buffer descriptor with invalid usage bits 0x%" PRIx64,
                     descriptorInfo.usage & ~validUsageBits);
         }
-        descriptor = grallocEncodeBufferDescriptor(descriptorInfo);
-	}
+        int ret = ::android::gralloc4::encodeBufferDescriptorInfo(descriptorInfo, &descriptor);
+        if (ret) {
+            ALOGE("Failed to createDescriptor. Failed to encode: %d.", ret);
+            error = Error::BAD_VALUE;
+        }
+    }
     hidl_cb(error, descriptor);
     return Void();
 }
@@ -175,16 +179,6 @@ Return<void> Mapper::lock(void* buffer, uint64_t /*cpuUsage*/, const IMapper::Re
     return Void();
 }
 
-
-Return<void> Mapper::lockYCbCr(void* /*buffer*/, uint64_t /*cpuUsage*/, const IMapper::Rect& /*accessRegion*/,
-                  const hidl_handle& /*acquireFence*/, IMapper::lockYCbCr_cb hidl_cb) {
-
-    ALOGE("lock_ycbcr() unsupported");
-    hidl_cb(Error::UNSUPPORTED, YCbCrLayout{});
-    return Void();
-}
-
-
 static hidl_handle getFenceHandle(const base::unique_fd& fenceFd, char* handleStorage) {
     native_handle_t* handle = nullptr;
     if (fenceFd >= 0) {
@@ -215,13 +209,130 @@ Return<void> Mapper::unlock(void* buffer, IMapper::unlock_cb hidl_cb) {
     return Void();
 }
 
+Return<Error> Mapper::validateBufferSize(void* /*buffer*/, const BufferDescriptorInfo& /*descriptor*/,
+        uint32_t /*stride*/) {
+    ALOGV("validateBufferSize()");
+    return Error::NONE;
+}
+
+Return<void> Mapper::getTransportSize(void* buffer, getTransportSize_cb hidl_cb) {
+    ALOGV("getTransportSize()");
+    const native_handle_t* bufferHandle = static_cast<const native_handle_t*>(buffer);
+    if (!bufferHandle) {
+        hidl_cb(Error::BAD_BUFFER, 0, 0);
+        return Void();
+    }
+    hidl_cb(Error::NONE, bufferHandle->numFds, bufferHandle->numInts);
+    return Void();
+}
+
+Return<void> Mapper::flushLockedBuffer(void* buffer,flushLockedBuffer_cb hidl_cb) {
+    ALOGV("flushLockedBuffer()");
+    const native_handle_t* bufferHandle = static_cast<const native_handle_t*>(buffer);
+    if (!bufferHandle) {
+        hidl_cb(Error::BAD_BUFFER, nullptr);
+        return Void();
+    }
+
+    int result = drm_unlock(bufferHandle);
+	if (result != 0) {
+		ALOGE("Mapper unlock failed: %d", result);
+        hidl_cb(Error::UNSUPPORTED, nullptr);
+        return Void();
+	}
+
+    base::unique_fd fenceFd;
+    fenceFd.reset((Fence::NO_FENCE)->dup());
+    NATIVE_HANDLE_DECLARE_STORAGE(fenceStorage, 1, 0);
+    hidl_cb(Error::NONE, getFenceHandle(fenceFd, fenceStorage));
+    return Void();
+}
+
+Return<Error> Mapper::rereadLockedBuffer(void* buffer) {
+    ALOGV("rereadLockedBuffer()");
+    const native_handle_t* bufferHandle = static_cast<const native_handle_t*>(buffer);
+    if (!bufferHandle) {
+        ALOGE("Failed to rereadLockedBuffer. Empty handle.");
+        return Error::BAD_BUFFER;
+    }
+    return Error::NONE;
+}
+
+Return<void> Mapper::isSupported(const BufferDescriptorInfo& /*descriptor*/,
+        isSupported_cb hidl_cb) {
+    ALOGV("isSupported()");
+    hidl_cb(Error::NONE, true);
+    return Void();
+}
+
+Return<void> Mapper::get(void* buffer, const MetadataType& /*metadataType*/, get_cb hidl_cb) {
+    ALOGV("get()");
+    hidl_vec<uint8_t> encodedMetadata;
+    buffer_handle_t bufferHandle = reinterpret_cast<buffer_handle_t>(buffer);
+    if (!bufferHandle) {
+        hidl_cb(Error::BAD_BUFFER, encodedMetadata);
+        return Void();
+    }
+    hidl_cb(Error::UNSUPPORTED, encodedMetadata);
+    return Void();
+}
+
+Return<Error> Mapper::set(void* buffer, const MetadataType& /*metadataType*/,
+        const hidl_vec<uint8_t>& /*metadata*/) {
+    ALOGV("set()");
+    buffer_handle_t bufferHandle = reinterpret_cast<buffer_handle_t>(buffer);
+    if (!bufferHandle) {
+        return Error::BAD_BUFFER;
+    }
+    return Error::UNSUPPORTED;
+}
+
+Return<void> Mapper::getFromBufferDescriptorInfo(const BufferDescriptorInfo& /*descriptor*/,
+        const MetadataType& /*metadataType*/, getFromBufferDescriptorInfo_cb hidl_cb) {
+    ALOGV("getFromBufferDescriptorInfo()");
+    hidl_vec<uint8_t> encodedMetadata;
+    hidl_cb(Error::UNSUPPORTED, encodedMetadata);
+    return Void();
+}
+
+Return<void> Mapper::listSupportedMetadataTypes(listSupportedMetadataTypes_cb hidl_cb) {
+    ALOGV("listSupportedMetadataTypes()");
+    hidl_vec<MetadataTypeDescription> supported;
+    hidl_cb(Error::NONE, supported);
+    return Void();
+}
+
+Return<void> Mapper::dumpBuffer(void* /*buffer*/, dumpBuffer_cb hidl_cb) {
+    ALOGV("dumpBuffer()");
+    BufferDump bufferDump;
+    hidl_cb(Error::NONE, bufferDump);
+    return Void();
+}
+
+Return<void> Mapper::dumpBuffers(dumpBuffers_cb hidl_cb) {
+    ALOGV("dumpBuffers()");
+    std::vector<BufferDump> bufferDumps;
+    hidl_cb(Error::NONE, bufferDumps);
+    return Void();
+}
+
+Return<void> Mapper::getReservedRegion(void* buffer, getReservedRegion_cb hidl_cb) {
+    ALOGV("getReservedRegion()");
+    buffer_handle_t bufferHandle = reinterpret_cast<buffer_handle_t>(buffer);
+    if (!bufferHandle) {
+        hidl_cb(Error::BAD_BUFFER, nullptr, 0);
+        return Void();
+    }
+    hidl_cb(Error::UNSUPPORTED, nullptr, 0);
+    return Void();
+}
 
 IMapper* HIDL_FETCH_IMapper(const char* /* name */) {
     return new Mapper();
 }
 
 }  // namespace implementation
-}  // namespace V2_0
+}  // namespace V4_0
 }  // namespace mapper
 }  // namespace graphics
 }  // namespace hardware

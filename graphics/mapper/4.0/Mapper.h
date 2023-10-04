@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 The Android Open Source Project
+ * Copyright 2023 Android-RPi Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,18 +17,16 @@
 #pragma once
 
 #include "Fence.h"
-#include <android/hardware/graphics/mapper/2.0/IMapper.h>
 
 namespace android {
 namespace hardware {
 namespace graphics {
 namespace mapper {
-namespace V2_0 {
+namespace V4_0 {
 namespace implementation {
 
 using common::V1_0::BufferUsage;
-using common::V1_0::PixelFormat;
-using mapper::V2_0::passthrough::grallocEncodeBufferDescriptor;
+using common::V1_2::PixelFormat;
 
 class Mapper : public IMapper {
   public:
@@ -46,10 +44,34 @@ class Mapper : public IMapper {
     Return<void> lock(void* buffer, uint64_t cpuUsage, const IMapper::Rect& accessRegion,
                   const hidl_handle& acquireFence, IMapper::lock_cb hidl_cb) override;
 
-    Return<void> lockYCbCr(void* buffer, uint64_t cpuUsage, const IMapper::Rect& accessRegion,
-            const hidl_handle& acquireFence, IMapper::lockYCbCr_cb hidl_cb) override;
-
     Return<void> unlock(void* buffer, IMapper::unlock_cb hidl_cb) override;
+
+    Return<Error> validateBufferSize(void* buffer, const BufferDescriptorInfo& descriptor,
+                  uint32_t stride) override;
+
+    Return<void> getTransportSize(void* buffer, getTransportSize_cb hidl_cb) override;
+
+    Return<void> flushLockedBuffer(void* buffer,flushLockedBuffer_cb hidl_cb) override;
+
+    Return<Error> rereadLockedBuffer(void* buffer) override;
+
+    Return<void> isSupported(const BufferDescriptorInfo& descriptor, isSupported_cb hidl_cb) override;
+
+    Return<void> get(void* buffer, const MetadataType& metadataType, get_cb hidl_cb) override;
+
+    Return<Error> set(void* buffer, const MetadataType& metadataType,
+            const hidl_vec<uint8_t>& metadata) override;
+
+    Return<void> getFromBufferDescriptorInfo(const BufferDescriptorInfo& descriptor,
+            const MetadataType& metadataType, getFromBufferDescriptorInfo_cb hidl_cb) override;
+
+    Return<void> listSupportedMetadataTypes(listSupportedMetadataTypes_cb hidl_cb) override;
+
+    Return<void> dumpBuffer(void* buffer, dumpBuffer_cb hidl_cb) override;
+    Return<void> dumpBuffers(dumpBuffers_cb hidl_cb) override;
+
+    Return<void> getReservedRegion(void* buffer, getReservedRegion_cb hidl_cb) override;
+
 
   private:
     int kms_fd;
@@ -58,7 +80,7 @@ class Mapper : public IMapper {
 extern "C" IMapper* HIDL_FETCH_IMapper(const char* name);
 
 }  // namespace implementation
-}  // namespace V2_0
+}  // namespace V4_0
 }  // namespace mapper
 }  // namespace graphics
 }  // namespace hardware

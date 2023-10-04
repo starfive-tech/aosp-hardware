@@ -1,19 +1,22 @@
 cc_binary {
-    name: "android.hardware.graphics.composer@2.1-service.arv",
+    name: "android.hardware.graphics.composer-service.arv",
     vendor: true,
     proprietary: true,
     relative_install_path: "hw",
-    init_rc: ["android.hardware.graphics.composer@2.1-service.arv.rc"],
+    init_rc: ["android.hardware.graphics.composer-service.arv.rc"],
+    vintf_fragments: [
+        "manifest_composer_arv.xml"
+    ],
     shared_libs: [
-        "android.hardware.graphics.composer@2.1",
+        "android.hardware.graphics.composer3-V1-ndk",
         "android.hardware.graphics.composer@2.1-resources",
-        "android.hardware.graphics.mapper@2.0",
-        "android.hardware.graphics.mapper@3.0",
-        "android.hardware.graphics.common@1.0",
+        "android.hardware.graphics.composer@2.2-resources",
+        "android.hardware.graphics.common-V4-ndk",
+        "android.hardware.graphics.common@1.2",
+        "android.hardware.graphics.mapper@4.0",
         "libbinder",
-        "libhidlbase",
+        "libbinder_ndk",
         "libhardware",
-        "libbase",
         "libutils",
         "libcutils",
         "liblog",
@@ -23,12 +26,11 @@ cc_binary {
         "libdrm",
     ],
     static_libs: [
+        "libaidlcommonsupport",
         "libdrm_gralloc",
     ],
     header_libs: [
-        "android.hardware.graphics.mapper@2.0-passthrough_headers",
-        "android.hardware.graphics.composer@2.1-command-buffer",
-        "android.hardware.graphics.composer@2.1-hal",
+        "android.hardware.graphics.composer3-command-buffer",
         "libhardware_headers",
         "libhardware_legacy_headers",
         "libsystem_headers",
@@ -41,6 +43,7 @@ cc_binary {
         "ComposerClient.cpp",
         "Composer.cpp",
         "service.cpp",
+        "impl/ResourceManager.cpp",
     ],
     cflags: [
         "-Wall",

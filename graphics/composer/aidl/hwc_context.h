@@ -21,18 +21,23 @@
 
 #include <drm_handle.h>
 
-namespace android {
+namespace aidl::android::hardware::graphics::composer3::impl {
 
 struct kms_output
 {
-	uint32_t crtc_id;
-	uint32_t connector_id;
-	uint32_t pipe;
-	drmModeModeInfo mode;
-	int xdpi, ydpi;
-	uint32_t drm_format;
-	int bpp;
-	uint32_t active;
+    uint32_t plane_id;
+    uint32_t crtc_id;
+    uint32_t connector_id;
+    uint32_t pipe;
+    drmModeModeInfo mode;
+    int xdpi, ydpi;
+    uint32_t drm_format;
+    int bpp;
+    uint32_t active;
+
+    uint32_t prop_fb_id;
+    uint32_t prop_crtc_id;
+    uint32_t prop_out_fence;
 };
 
 #ifndef ANDROID_HARDWARE_HWCOMPOSER2_H
@@ -42,7 +47,7 @@ typedef uint64_t hwc2_display_t;
 class hwc_context {
   public :
     hwc_context();
-    int hwc_post(buffer_handle_t handle);
+    int hwc_post(buffer_handle_t handle, int32_t *out_fence);
 
     uint32_t  width;
     uint32_t  height;
@@ -54,30 +59,19 @@ class hwc_context {
   private:
     int init_kms();
     drmModeConnectorPtr fetch_connector(uint32_t type);
-    drmModeConnectorPtr fetch_connector2(uint32_t type);
     int init_with_connector(struct kms_output *output,
     		drmModeConnectorPtr connector);
-    void init_features();
-    int bo_post(const private_handle_t *bo);
-    void wait_for_post(int flip);
-    int set_crtc(struct kms_output *output, uint32_t fb_id);
-    int bo_add_fb(const private_handle_t *bo);
 
-	int kms_fd;
-	drmModeResPtr resources;
-	int primary_connector;
-	struct kms_output primary_output;
-	struct kms_output secondary_output;
+    int add_fb(const private_handle_t *hnd);
+    int first_post;
+    int atomic_commit(struct kms_output *output, const private_handle_t *hnd,
+        int32_t *out_fence);
 
-	int swap_interval;
-	drmEventContext evctx;
-	int first_post;
-	unsigned int last_swap;
-
-  public:
-    int page_flip(const private_handle_t *bo);
-    int waiting_flip;
-    const private_handle_t *current_front, *next_front;
+    int kms_fd;
+    drmModeResPtr resources;
+    drmModePlaneResPtr plane_resources;
+    int primary_connector;
+    struct kms_output primary_output;
 };
 
-} // namespace android
+} // namespace aidl::android::hardware::graphics::composer3::impl

@@ -1,6 +1,7 @@
-service vendor.gralloc-arv-2-0 /vendor/bin/hw/android.hardware.graphics.allocator@2.0-service.arv
+service vendor.hwcomposer-arv /vendor/bin/hw/android.hardware.graphics.composer-service.arv
     class hal animation
     user system
     group graphics drmrpc
     capabilities SYS_NICE
     onrestart restart surfaceflinger
+    task_profiles ServiceCapacityLow

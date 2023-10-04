@@ -34,7 +34,7 @@
 
 #include "hwc_context.h"
 
-namespace android {
+namespace aidl::android::hardware::graphics::composer3::impl {
 
 class Hwc2Device {
 public:
@@ -51,7 +51,7 @@ public:
     int32_t setVsyncEnabled(hwc2_display_t displayId, int32_t intEnabled);
 
     int32_t setClientTarget(hwc2_display_t displayId, buffer_handle_t target,
-            int32_t acquireFence, int32_t dataspace, hwc_region_t damage);
+            int32_t acquireFence, int32_t dataspace);
     int32_t validateDisplay(hwc2_display_t displayId, uint32_t* outNumTypes,
             uint32_t* outNumRequests);
     int32_t presentDisplay(hwc2_display_t displayId, int32_t* outRetireFence);
@@ -134,4 +134,4 @@ private:
     std::unique_ptr<hwc_context> mHwcContext;
 };
 
-} // namespace android
+} // namespace aidl::android::hardware::graphics::composer3::impl

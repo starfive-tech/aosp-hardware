@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "composer@2.1-Hwc2Device"
+#define LOG_TAG "composer-Hwc2Device"
 //#define LOG_NDEBUG 0
 #include <android-base/logging.h>
 #include <utils/Log.h>
@@ -27,7 +27,7 @@
 
 #include "Hwc2Device.h"
 
-namespace android {
+namespace aidl::android::hardware::graphics::composer3::impl {
 
 Hwc2Device::Hwc2Device()
 {
@@ -135,7 +135,7 @@ int32_t Hwc2Device::setVsyncEnabled(hwc2_display_t displayId, int32_t intEnabled
 
 
 int32_t Hwc2Device::setClientTarget(hwc2_display_t displayId, buffer_handle_t target,
-        int32_t acquireFence, int32_t dataspace, hwc_region_t /*damage*/) {
+        int32_t acquireFence, int32_t dataspace) {
     ALOGV("setClientTarget(%p, %d)", target, acquireFence);
     if (acquireFence >= 0) {
         sync_wait(acquireFence, -1);
@@ -177,8 +177,8 @@ int32_t Hwc2Device::presentDisplay(hwc2_display_t displayId, int32_t* outRetireF
         return HWC2_ERROR_NOT_VALIDATED;
     }
     ALOGV("presentDisplay(%p)", mBuffer);
-    mHwcContext->hwc_post(mBuffer);
     *outRetireFence = -1;
+    mHwcContext->hwc_post(mBuffer, outRetireFence);
     return HWC2_ERROR_NONE;
 }
 
@@ -398,7 +398,5 @@ void Hwc2Device::VsyncThread::vsyncLoop() {
     }
 }
 
-
-
-} // namespace android
+} // namespace aidl::android::hardware::graphics::composer3::impl
 
