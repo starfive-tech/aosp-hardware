@@ -8,7 +8,7 @@ cc_binary {
         "manifest_composer_arv.xml"
     ],
     shared_libs: [
-        "android.hardware.graphics.composer3-V1-ndk",
+        "android.hardware.graphics.composer3-V2-ndk",
         "android.hardware.graphics.composer@2.1-resources",
         "android.hardware.graphics.composer@2.2-resources",
         "android.hardware.graphics.common-V4-ndk",

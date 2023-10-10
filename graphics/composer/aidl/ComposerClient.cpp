@@ -223,6 +223,11 @@ ndk::ScopedAStatus ComposerClient::getHdrCapabilities(int64_t /*display*/, HdrCa
     return TO_BINDER_STATUS(HWC2_ERROR_UNSUPPORTED);
 }
 
+ndk::ScopedAStatus ComposerClient::getOverlaySupport(OverlayProperties* /*caps*/) {
+    DEBUG_FUNC();
+    return TO_BINDER_STATUS(HWC2_ERROR_UNSUPPORTED);
+}
+
 ndk::ScopedAStatus ComposerClient::getMaxVirtualDisplayCount(int32_t* count) {
     DEBUG_FUNC();
     *count = 0;
@@ -314,6 +319,19 @@ ndk::ScopedAStatus ComposerClient::getPreferredBootDisplayConfig(int64_t /*displ
     return TO_BINDER_STATUS(HWC2_ERROR_NONE);
 }
 
+ndk::ScopedAStatus ComposerClient::getHdrConversionCapabilities(
+        std::vector<common::HdrConversionCapability>* /*hdrConversionCapabilities*/) {
+    DEBUG_FUNC();
+    return TO_BINDER_STATUS(HWC2_ERROR_UNSUPPORTED);
+}
+
+ndk::ScopedAStatus ComposerClient::setHdrConversionStrategy(
+        const common::HdrConversionStrategy& /*hdrConversionStrategy*/,
+        common::Hdr* /*preferredHdrOutputType*/) {
+    DEBUG_FUNC();
+    return TO_BINDER_STATUS(HWC2_ERROR_UNSUPPORTED);
+}
+
 ndk::ScopedAStatus ComposerClient::setAutoLowLatencyMode(int64_t /*display*/, bool /*on*/) {
     DEBUG_FUNC();
     return TO_BINDER_STATUS(HWC2_ERROR_NONE);
@@ -379,6 +397,12 @@ ndk::ScopedAStatus ComposerClient::setVsyncEnabled(int64_t display, bool enabled
 ndk::ScopedAStatus ComposerClient::setIdleTimerEnabled(int64_t /*display*/, int32_t /*timeout*/) {
     DEBUG_FUNC();
     return TO_BINDER_STATUS(HWC2_ERROR_NONE);
+}
+
+ndk::ScopedAStatus ComposerClient::setRefreshRateChangedCallbackDebugEnabled(int64_t /*display*/,
+                                                                             bool /*enabled*/) {
+    DEBUG_FUNC();
+    return TO_BINDER_STATUS(HWC2_ERROR_UNSUPPORTED);
 }
 
 void ComposerClient::HalEventCallback::onHotplug(int64_t display, bool connected) {
